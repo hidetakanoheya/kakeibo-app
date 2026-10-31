@@ -1,0 +1,431 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>家計簿</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<style>
+  :root { --bg:#F7F6F3; --ink:#1F1E1B; --muted:#6B6A65; --line:#D6D4CE; --card:#FFFFFF; --accent:#2F6F5E; --chip:#EDEBE5; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font-family: system-ui, -apple-system, "Hiragino Sans", "Yu Gothic", sans-serif; }
+  #app { max-width: 420px; margin: 0 auto; min-height: 100vh; padding: 20px 16px 84px; display:flex; flex-direction:column; gap:12px; }
+  button, input { font: inherit; }
+  button { cursor: pointer; }
+  .row { display:flex; gap:8px; align-items:center; }
+  .wrap { display:flex; flex-wrap:wrap; gap:8px; }
+  .scroll { display:flex; gap:8px; overflow-x:auto; padding-bottom:2px; }
+  .scroll > * { flex: 0 0 auto; }
+  .label { font-size:12px; color:var(--muted); }
+  .chip { height:36px; padding:0 14px; border-radius:18px; border:1px solid var(--line); background:var(--card); color:var(--ink); font-size:14px; }
+  .chip.on { background:var(--ink); color:#fff; border-color:var(--ink); }
+  .seg { flex:1; height:38px; border-radius:19px; border:1px solid var(--ink); background:var(--card); font-size:15px; }
+  .seg.on { background:var(--ink); color:#fff; }
+  .card { background:var(--card); border-radius:16px; padding:16px; display:flex; flex-direction:column; gap:10px; }
+  .big { font-size:44px; font-weight:600; letter-spacing:-1px; text-align:right; min-height:56px; }
+  .keys { display:grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap:6px; }
+  .key { height:48px; border-radius:12px; border:0; background:var(--card); font-size:20px; }
+  .save { height:52px; border-radius:14px; border:0; background:var(--accent); color:#fff; font-size:18px; font-weight:600; }
+  .btn { height:44px; border-radius:12px; border:1px solid var(--line); background:var(--card); padding:0 14px; font-size:14px; }
+  .btn.primary { background:var(--accent); color:#fff; border-color:var(--accent); }
+  .btn.danger { color:#A23B2A; }
+  input[type=text], input[type=email], input[type=password], input[type=date], input.memo { height:44px; border:1px solid var(--line); border-radius:12px; padding:0 12px; background:var(--card); width:100%; }
+  .list { display:flex; flex-direction:column; gap:6px; }
+  .item { background:var(--card); border-radius:14px; padding:12px 14px; display:flex; justify-content:space-between; align-items:center; gap:8px; text-align:left; border:0; width:100%; }
+  .muted { color:var(--muted); font-size:12px; }
+  .amt { font-size:16px; font-weight:600; white-space:nowrap; }
+  .amt.neg { color:var(--accent); }
+  .tabs { position:fixed; left:0; right:0; bottom:0; background:var(--card); border-top:1px solid var(--line); display:flex; justify-content:center; }
+  .tabs .inner { width:100%; max-width:420px; display:flex; }
+  .tabs button { flex:1; height:58px; border:0; background:none; font-size:12px; color:var(--muted); }
+  .tabs button.on { color:var(--ink); font-weight:600; }
+  .bar { height:8px; border-radius:4px; background:#ECEAE4; overflow:hidden; }
+  .bar > div { height:100%; background:var(--accent); }
+  .toast { position:fixed; left:50%; bottom:76px; transform:translateX(-50%); background:var(--ink); color:#fff; padding:10px 16px; border-radius:12px; font-size:14px; max-width:90%; z-index:10; }
+  h1 { font-size:20px; margin:4px 0 0; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+const SUPABASE_URL = 'https://pnogopxwldrzgkihmtzx.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBub2dvcHh3bGRyemdraWhtdHp4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTM0Mjg3MTksImV4cCI6MjEwOTAwNDcxOX0.FAWwvat4PITKg4qSKsJ4rWh65nExYeCDQgOlvHr54ig';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+const pad = (n) => String(n).padStart(2, '0');
+const todayStr = () => { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
+const monthStr = (d = new Date()) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}`;
+const shiftMonth = (ym, delta) => { const [y, m] = ym.split('-').map(Number); const d = new Date(y, m - 1 + delta, 1); return monthStr(d); };
+const yen = (n) => '¥' + Number(n).toLocaleString('ja-JP');
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+const state = {
+  session: null,
+  tab: 'input',
+  month: monthStr(),
+  kind: '支出',
+  groupId: null,
+  categoryId: null,
+  paymentId: null,
+  amount: '',
+  refund: false,
+  date: todayStr(),
+  memo: '',
+  settingsKind: '支出',
+  openGroupId: null,
+  groups: [],
+  categories: [],
+  payments: [],
+  txs: [],
+};
+
+function toast(msg) {
+  const el = document.createElement('div');
+  el.className = 'toast';
+  el.textContent = msg;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 2200);
+}
+
+async function loadMeta() {
+  const [g, c, p] = await Promise.all([
+    sb.from('groups').select('*').order('sort_order'),
+    sb.from('categories').select('*').order('sort_order'),
+    sb.from('payment_methods').select('*').order('sort_order'),
+  ]);
+  for (const r of [g, c, p]) if (r.error) throw r.error;
+  state.groups = g.data;
+  state.categories = c.data;
+  state.payments = p.data;
+}
+
+async function loadMonth() {
+  const start = `${state.month}-01`;
+  const end = `${shiftMonth(state.month, 1)}-01`;
+  const { data, error } = await sb.from('transactions').select('*')
+    .gte('date', start).lt('date', end)
+    .order('date', { ascending: false }).order('created_at', { ascending: false });
+  if (error) throw error;
+  state.txs = data;
+}
+
+async function reload() {
+  await Promise.all([loadMeta(), loadMonth()]);
+}
+
+// 入力画面で使う、現在の選択（無効なものは最初の候補に戻す）
+function current() {
+  const groups = state.groups.filter((g) => g.kind === state.kind && g.visible);
+  const group = groups.find((g) => g.id === state.groupId) ?? groups[0];
+  const cats = state.categories.filter((c) => group && c.group_id === group.id && c.visible && !c.archived);
+  const cat = cats.find((c) => c.id === state.categoryId) ?? cats[0];
+  const pays = state.payments.filter((p) => p.visible);
+  const pay = pays.find((p) => p.id === state.paymentId) ?? pays[0];
+  return { groups, group, cats, cat, pays, pay };
+}
+
+const catById = () => new Map(state.categories.map((c) => [c.id, c]));
+const payById = () => new Map(state.payments.map((p) => [p.id, p]));
+const groupById = () => new Map(state.groups.map((g) => [g.id, g]));
+
+// ---- 画面 ----
+function renderLogin() {
+  return `
+    <div style="height:24px"></div>
+    <h1>家計簿</h1>
+    <div class="card">
+      <div class="label">メールアドレス</div>
+      <input id="email" type="email" autocomplete="username">
+      <div class="label">パスワード</div>
+      <input id="password" type="password" autocomplete="current-password">
+      <button class="save" data-act="login">ログイン</button>
+    </div>`;
+}
+
+function renderInput() {
+  const c = current();
+  const keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'C', '0', '⌫'];
+  const kindBtns = ['支出', '収入', '貯蓄'].map((k) =>
+    `<button class="seg ${state.kind === k ? 'on' : ''}" data-act="kind" data-value="${k}">${k}</button>`).join('');
+  const groupChips = c.groups.map((g) =>
+    `<button class="chip ${c.group && c.group.id === g.id ? 'on' : ''}" data-act="group" data-id="${g.id}">${esc(g.name)}</button>`).join('');
+  const catChips = c.cats.map((x) =>
+    `<button class="chip ${c.cat && c.cat.id === x.id ? 'on' : ''}" data-act="cat" data-id="${x.id}">${esc(x.name)}</button>`).join('');
+  const payChips = c.pays.map((p) =>
+    `<button class="chip ${c.pay && c.pay.id === p.id ? 'on' : ''}" data-act="pay" data-id="${p.id}">${esc(p.name)}</button>`).join('');
+  const shown = state.amount ? Number(state.amount).toLocaleString('ja-JP') : '0';
+  return `
+    <div class="row" style="justify-content:space-between">
+      <input type="date" id="date" value="${state.date}" style="width:auto">
+      <span class="muted">今月 支出 ${yen(monthTotals().expense)}</span>
+    </div>
+    <div class="row">${kindBtns}</div>
+    <div class="big">${state.refund && state.kind === '支出' ? '−' : ''}¥${shown}</div>
+    <div class="row">
+      <button class="chip ${state.refund ? 'on' : ''}" data-act="refund">返金・精算（マイナス）</button>
+    </div>
+    <div class="label">大分類</div>
+    <div class="scroll">${groupChips || '<span class="muted">表示する大分類がありません（設定で表示してください）</span>'}</div>
+    <div class="label">項目</div>
+    <div class="scroll">${catChips || '<span class="muted">表示する項目がありません（設定で表示してください）</span>'}</div>
+    <div class="label">支払い方法</div>
+    <div class="scroll">${payChips || '<span class="muted">表示する支払い方法がありません</span>'}</div>
+    <input class="memo" id="memo" placeholder="メモ（任意）" value="${esc(state.memo)}">
+    <div class="keys">
+      ${keys.map((k) => `<button class="key" data-act="key" data-key="${k}">${k}</button>`).join('')}
+    </div>
+    <button class="save" data-act="save">保存</button>`;
+}
+
+function monthTotals() {
+  const t = { expense: 0, income: 0, savings: 0 };
+  for (const x of state.txs) {
+    if (x.kind === '支出') t.expense += x.amount;
+    else if (x.kind === '収入') t.income += x.amount;
+    else if (x.kind === '貯蓄') t.savings += x.amount;
+  }
+  return t;
+}
+
+function renderHistory() {
+  const cats = catById();
+  const pays = payById();
+  const rows = state.txs.map((x) => {
+    const cat = cats.get(x.category_id);
+    const pay = pays.get(x.payment_method_id);
+    const d = x.date.slice(5).replace('-', '/');
+    return `
+      <button class="item" data-act="del" data-id="${x.id}">
+        <div>
+          <div>${esc(cat ? cat.name : '（項目なし）')}</div>
+          <div class="muted">${d} ・ ${esc(pay ? pay.name : '')}${x.memo ? ' ・ ' + esc(x.memo) : ''}</div>
+        </div>
+        <span class="amt ${x.amount < 0 ? 'neg' : ''}">${x.amount < 0 ? '−' + yen(-x.amount) : yen(x.amount)}</span>
+      </button>`;
+  }).join('');
+  return `
+    <div class="row" style="justify-content:space-between">
+      <button class="btn" data-act="month" data-delta="-1">←</button>
+      <strong>${state.month.replace('-', '年')}月</strong>
+      <button class="btn" data-act="month" data-delta="1">→</button>
+    </div>
+    <div class="muted">タップすると削除できます</div>
+    <div class="list">${rows || '<div class="muted">この月の記録はありません</div>'}</div>`;
+}
+
+function renderMonthly() {
+  const t = monthTotals();
+  const groups = groupById();
+  const cats = catById();
+  const byGroup = new Map();
+  for (const x of state.txs) {
+    if (x.kind !== '支出') continue;
+    const cat = cats.get(x.category_id);
+    const g = cat ? groups.get(cat.group_id) : null;
+    const name = g ? g.name : '（その他）';
+    byGroup.set(name, (byGroup.get(name) ?? 0) + x.amount);
+  }
+  const entries = [...byGroup.entries()].sort((a, b) => b[1] - a[1]);
+  const max = Math.max(1, ...entries.map(([, v]) => Math.abs(v)));
+  const bars = entries.map(([name, v]) => `
+    <div>
+      <div class="row" style="justify-content:space-between"><span>${esc(name)}</span><span>${yen(v)}</span></div>
+      <div class="bar"><div style="width:${Math.max(0, (v / max) * 100)}%"></div></div>
+    </div>`).join('');
+  return `
+    <div class="row" style="justify-content:space-between">
+      <button class="btn" data-act="month" data-delta="-1">←</button>
+      <strong>${state.month.replace('-', '年')}月</strong>
+      <button class="btn" data-act="month" data-delta="1">→</button>
+    </div>
+    <div class="card">
+      <span class="muted">支出の合計</span>
+      <span style="font-size:36px;font-weight:600">${yen(t.expense)}</span>
+      <span class="muted">収入 ${yen(t.income)} ・ 貯蓄 ${yen(t.savings)}</span>
+      <span class="muted">収入 − 支出 ${yen(t.income - t.expense)}</span>
+    </div>
+    <div class="card">
+      <span style="font-weight:600">大分類ごとの支出</span>
+      ${bars || '<span class="muted">支出の記録がありません</span>'}
+    </div>`;
+}
+
+function renderSettings() {
+  const kindBtns = ['支出', '収入', '貯蓄'].map((k) =>
+    `<button class="seg ${state.settingsKind === k ? 'on' : ''}" data-act="settings-kind" data-value="${k}">${k}</button>`).join('');
+  const groups = state.groups.filter((g) => g.kind === state.settingsKind);
+  const groupRows = groups.map((g) => {
+    const cats = state.categories.filter((c) => c.group_id === g.id && !c.archived);
+    const open = state.openGroupId === g.id;
+    const catRows = cats.map((c) => `
+      <div class="item" style="padding:8px 12px">
+        <span>${esc(c.name)}</span>
+        <button class="chip ${c.visible ? 'on' : ''}" data-act="toggle-cat" data-id="${c.id}">${c.visible ? '表示' : '非表示'}</button>
+      </div>`).join('');
+    return `
+      <div class="card" style="padding:12px">
+        <div class="row" style="justify-content:space-between">
+          <button class="btn" style="border:0;background:none;padding:0" data-act="open-group" data-id="${g.id}">${esc(g.name)} <span class="muted">${open ? '▲' : '▼'}</span></button>
+          <button class="chip ${g.visible ? 'on' : ''}" data-act="toggle-group" data-id="${g.id}">${g.visible ? '表示' : '非表示'}</button>
+        </div>
+        ${open ? `
+          <div class="list">${catRows}</div>
+          <div class="row">
+            <input type="text" id="newcat-${g.id}" placeholder="項目の名前を追加">
+            <button class="btn" data-act="add-cat" data-id="${g.id}">追加</button>
+          </div>` : ''}
+      </div>`;
+  }).join('');
+  const payRows = state.payments.map((p) => `
+    <div class="item" style="padding:8px 12px">
+      <span>${esc(p.name)}</span>
+      <button class="chip ${p.visible ? 'on' : ''}" data-act="toggle-pay" data-id="${p.id}">${p.visible ? '表示' : '非表示'}</button>
+    </div>`).join('');
+  return `
+    <h1>設定</h1>
+    <div class="muted">表示をOFFにした項目は入力画面に出ません。過去の記録には残ります。</div>
+    <div class="row">${kindBtns}</div>
+    <div class="list">${groupRows}</div>
+    <div class="label">支払い方法</div>
+    <div class="list">${payRows}</div>`;
+}
+
+function render() {
+  const app = document.getElementById('app');
+  if (!state.session) {
+    app.innerHTML = renderLogin();
+    return;
+  }
+  const body = {
+    input: renderInput,
+    history: renderHistory,
+    monthly: renderMonthly,
+    settings: renderSettings,
+  }[state.tab]();
+  const tabs = [['input', '入力'], ['history', '履歴'], ['monthly', '今月'], ['settings', '設定']]
+    .map(([k, label]) => `<button class="${state.tab === k ? 'on' : ''}" data-act="tab" data-value="${k}">${label}</button>`).join('');
+  app.innerHTML = `
+    ${body}
+    <div class="row" style="justify-content:flex-end"><button class="btn" data-act="logout">ログアウト</button></div>
+    <nav class="tabs"><div class="inner">${tabs}</div></nav>`;
+  const memo = document.getElementById('memo');
+  if (memo) memo.addEventListener('input', (e) => { state.memo = e.target.value; });
+  const date = document.getElementById('date');
+  if (date) date.addEventListener('change', (e) => { state.date = e.target.value; });
+}
+
+// ---- 操作 ----
+async function run(fn) {
+  try { await fn(); } catch (e) { toast('エラー: ' + (e.message ?? e)); }
+  render();
+}
+
+const actions = {
+  async login() {
+    const email = document.getElementById('email').value.trim();
+    const password = document.getElementById('password').value;
+    const { data, error } = await sb.auth.signInWithPassword({ email, password });
+    if (error) return toast('ログインできませんでした');
+    state.session = data.session;
+    await reload();
+  },
+  async logout() {
+    await sb.auth.signOut();
+    state.session = null;
+  },
+  tab(el) { state.tab = el.dataset.value; },
+  kind(el) {
+    state.kind = el.dataset.value;
+    state.groupId = null; state.categoryId = null;
+  },
+  group(el) { state.groupId = el.dataset.id; state.categoryId = null; },
+  cat(el) { state.categoryId = el.dataset.id; },
+  pay(el) { state.paymentId = el.dataset.id; },
+  refund() { state.refund = !state.refund; },
+  key(el) {
+    const k = el.dataset.key;
+    if (k === 'C') state.amount = '';
+    else if (k === '⌫') state.amount = state.amount.slice(0, -1);
+    else if (state.amount.length < 9) state.amount = (state.amount === '0' ? '' : state.amount) + k;
+  },
+  async save() {
+    const c = current();
+    const n = Number(state.amount);
+    if (!n) return toast('金額を入力してください');
+    if (!c.cat) return toast('項目がありません（設定で表示してください）');
+    if (!c.pay) return toast('支払い方法がありません（設定で表示してください）');
+    const { error } = await sb.from('transactions').insert({
+      date: state.date,
+      kind: state.kind,
+      category_id: c.cat.id,
+      payment_method_id: c.pay.id,
+      amount: state.refund ? -n : n,
+      memo: state.memo.trim(),
+      source: 'manual',
+    });
+    if (error) return toast('保存できませんでした: ' + error.message);
+    state.amount = ''; state.memo = ''; state.refund = false;
+    state.month = state.date.slice(0, 7);
+    await loadMonth();
+    toast('保存しました');
+  },
+  async month(el) {
+    state.month = shiftMonth(state.month, Number(el.dataset.delta));
+    await loadMonth();
+  },
+  async del(el) {
+    if (!confirm('この記録を削除しますか？')) return;
+    const { error } = await sb.from('transactions').delete().eq('id', el.dataset.id);
+    if (error) return toast('削除できませんでした');
+    await loadMonth();
+  },
+  'settings-kind'(el) { state.settingsKind = el.dataset.value; state.openGroupId = null; },
+  'open-group'(el) { state.openGroupId = state.openGroupId === el.dataset.id ? null : el.dataset.id; },
+  async 'toggle-group'(el) {
+    const g = state.groups.find((x) => x.id === el.dataset.id);
+    const { error } = await sb.from('groups').update({ visible: !g.visible }).eq('id', g.id);
+    if (error) throw error;
+    await loadMeta();
+  },
+  async 'toggle-cat'(el) {
+    const c = state.categories.find((x) => x.id === el.dataset.id);
+    const { error } = await sb.from('categories').update({ visible: !c.visible }).eq('id', c.id);
+    if (error) throw error;
+    await loadMeta();
+  },
+  async 'toggle-pay'(el) {
+    const p = state.payments.find((x) => x.id === el.dataset.id);
+    const { error } = await sb.from('payment_methods').update({ visible: !p.visible }).eq('id', p.id);
+    if (error) throw error;
+    await loadMeta();
+  },
+  async 'add-cat'(el) {
+    const name = document.getElementById(`newcat-${el.dataset.id}`).value.trim();
+    if (!name) return toast('項目の名前を入力してください');
+    const sameGroup = state.categories.filter((c) => c.group_id === el.dataset.id);
+    const sort = Math.max(0, ...sameGroup.map((c) => c.sort_order)) + 1;
+    const { error } = await sb.from('categories').insert({ group_id: el.dataset.id, name, sort_order: sort, visible: true });
+    if (error) throw error;
+    await loadMeta();
+    toast('追加しました');
+  },
+};
+
+document.getElementById('app').addEventListener('click', (e) => {
+  const el = e.target.closest('[data-act]');
+  if (!el) return;
+  const fn = actions[el.dataset.act];
+  if (fn) run(() => fn(el));
+});
+
+(async function init() {
+  const { data } = await sb.auth.getSession();
+  state.session = data.session;
+  if (state.session) {
+    try { await reload(); } catch (e) { toast('読み込みエラー: ' + e.message); }
+  }
+  render();
+})();
+</script>
+</body>
+</html>
