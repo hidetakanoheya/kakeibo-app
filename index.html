@@ -11,7 +11,7 @@
   body { margin:0; background:var(--bg); color:var(--ink); font-family: system-ui, -apple-system, "Hiragino Sans", "Yu Gothic", sans-serif; }
   #app { max-width: 420px; margin: 0 auto; min-height: 100vh; padding: 20px 16px 84px; display:flex; flex-direction:column; gap:12px; }
   /* 入力画面は、1画面に収める */
-  #app.one { height: 100vh; height: 100dvh; min-height: 0; padding: 12px 16px 70px; gap: 8px; overflow: hidden; }
+  #app.one { height: 100vh; height: 100dvh; min-height: 0; padding: 12px 16px calc(76px + env(safe-area-inset-bottom)); gap: 8px; overflow: hidden; }
   button, input { font: inherit; }
   button { cursor: pointer; }
   .row { display:flex; gap:8px; align-items:center; }
@@ -25,10 +25,8 @@
   .seg.on { background:var(--ink); color:#fff; }
   .card { background:var(--card); border-radius:16px; padding:16px; display:flex; flex-direction:column; gap:10px; }
   .big { font-size:40px; font-weight:600; letter-spacing:-1px; text-align:right; line-height:1.1; }
-  .keys { display:grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap:6px; }
-  .one .keys { flex:1; min-height:0; grid-template-rows: repeat(4, minmax(0,1fr)); }
-  .key { height:44px; border-radius:12px; border:0; background:var(--card); font-size:20px; }
-  .one .key { height:auto; }
+  .keys { display:grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap:5px; }
+  .key { height:40px; border-radius:10px; border:0; background:var(--card); font-size:18px; }
   .save { height:48px; border-radius:14px; border:0; background:var(--accent); color:#fff; font-size:17px; font-weight:600; }
   .btn { height:44px; border-radius:12px; border:1px solid var(--line); background:var(--card); padding:0 14px; font-size:14px; }
   .btn.primary { background:var(--accent); color:#fff; border-color:var(--accent); }
@@ -39,10 +37,10 @@
   .muted { color:var(--muted); font-size:12px; }
   .amt { font-size:16px; font-weight:600; white-space:nowrap; }
   .amt.neg { color:var(--accent); }
-  .tabs { position:fixed; left:0; right:0; bottom:0; background:var(--card); border-top:1px solid var(--line); display:flex; justify-content:center; z-index:5; }
-  .tabs .inner { width:100%; max-width:420px; display:flex; }
-  .tabs button { flex:1; height:58px; border:0; background:none; font-size:12px; color:var(--muted); }
-  .tabs button.on { color:var(--ink); font-weight:600; }
+  .tabs { position:fixed; left:0; right:0; bottom:0; background:var(--card); border-top:1px solid var(--line); display:flex; justify-content:center; z-index:5; padding-bottom: env(safe-area-inset-bottom); }
+  .tabs .inner { width:100%; max-width:420px; display:flex; gap:4px; padding:4px 8px; }
+  .tabs button { flex:1; height:56px; border:0; border-radius:12px; background:none; font-size:15px; color:var(--muted); }
+  .tabs button.on { color:#fff; background:var(--ink); font-weight:600; }
   .bar { height:8px; border-radius:4px; background:#ECEAE4; overflow:hidden; }
   .bar > div { height:100%; background:var(--accent); }
   .toast { position:fixed; left:50%; bottom:76px; transform:translateX(-50%); background:var(--ink); color:#fff; padding:10px 16px; border-radius:12px; font-size:14px; max-width:90%; z-index:10; }
