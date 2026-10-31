@@ -10,32 +10,36 @@
   * { box-sizing: border-box; }
   body { margin:0; background:var(--bg); color:var(--ink); font-family: system-ui, -apple-system, "Hiragino Sans", "Yu Gothic", sans-serif; }
   #app { max-width: 420px; margin: 0 auto; min-height: 100vh; padding: 20px 16px 84px; display:flex; flex-direction:column; gap:12px; }
+  /* 入力画面は、1画面に収める */
+  #app.one { height: 100vh; height: 100dvh; min-height: 0; padding: 12px 16px 70px; gap: 8px; overflow: hidden; }
   button, input { font: inherit; }
   button { cursor: pointer; }
   .row { display:flex; gap:8px; align-items:center; }
   .wrap { display:flex; flex-wrap:wrap; gap:8px; }
-  .scroll { display:flex; gap:8px; overflow-x:auto; padding-bottom:2px; }
+  .scroll { display:flex; gap:8px; overflow-x:auto; }
   .scroll > * { flex: 0 0 auto; }
-  .label { font-size:12px; color:var(--muted); }
-  .chip { height:36px; padding:0 14px; border-radius:18px; border:1px solid var(--line); background:var(--card); color:var(--ink); font-size:14px; }
+  .label { font-size:11px; line-height:14px; color:var(--muted); }
+  .chip { height:34px; padding:0 14px; border-radius:17px; border:1px solid var(--line); background:var(--card); color:var(--ink); font-size:14px; white-space:nowrap; }
   .chip.on { background:var(--ink); color:#fff; border-color:var(--ink); }
-  .seg { flex:1; height:38px; border-radius:19px; border:1px solid var(--ink); background:var(--card); font-size:15px; }
+  .seg { flex:1; height:36px; border-radius:18px; border:1px solid var(--ink); background:var(--card); font-size:15px; }
   .seg.on { background:var(--ink); color:#fff; }
   .card { background:var(--card); border-radius:16px; padding:16px; display:flex; flex-direction:column; gap:10px; }
-  .big { font-size:44px; font-weight:600; letter-spacing:-1px; text-align:right; min-height:56px; }
+  .big { font-size:40px; font-weight:600; letter-spacing:-1px; text-align:right; line-height:1.1; }
   .keys { display:grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap:6px; }
-  .key { height:48px; border-radius:12px; border:0; background:var(--card); font-size:20px; }
-  .save { height:52px; border-radius:14px; border:0; background:var(--accent); color:#fff; font-size:18px; font-weight:600; }
+  .one .keys { flex:1; min-height:0; grid-template-rows: repeat(4, minmax(0,1fr)); }
+  .key { height:44px; border-radius:12px; border:0; background:var(--card); font-size:20px; }
+  .one .key { height:auto; }
+  .save { height:48px; border-radius:14px; border:0; background:var(--accent); color:#fff; font-size:17px; font-weight:600; }
   .btn { height:44px; border-radius:12px; border:1px solid var(--line); background:var(--card); padding:0 14px; font-size:14px; }
   .btn.primary { background:var(--accent); color:#fff; border-color:var(--accent); }
-  .btn.danger { color:#A23B2A; }
-  input[type=text], input[type=email], input[type=password], input[type=date], input.memo { height:44px; border:1px solid var(--line); border-radius:12px; padding:0 12px; background:var(--card); width:100%; }
+  input[type=text], input[type=email], input[type=password], input[type=date], input.memo { height:40px; border:1px solid var(--line); border-radius:12px; padding:0 12px; background:var(--card); width:100%; }
+  input[type=date] { width:auto; }
   .list { display:flex; flex-direction:column; gap:6px; }
   .item { background:var(--card); border-radius:14px; padding:12px 14px; display:flex; justify-content:space-between; align-items:center; gap:8px; text-align:left; border:0; width:100%; }
   .muted { color:var(--muted); font-size:12px; }
   .amt { font-size:16px; font-weight:600; white-space:nowrap; }
   .amt.neg { color:var(--accent); }
-  .tabs { position:fixed; left:0; right:0; bottom:0; background:var(--card); border-top:1px solid var(--line); display:flex; justify-content:center; }
+  .tabs { position:fixed; left:0; right:0; bottom:0; background:var(--card); border-top:1px solid var(--line); display:flex; justify-content:center; z-index:5; }
   .tabs .inner { width:100%; max-width:420px; display:flex; }
   .tabs button { flex:1; height:58px; border:0; background:none; font-size:12px; color:var(--muted); }
   .tabs button.on { color:var(--ink); font-weight:600; }
@@ -156,13 +160,13 @@ function renderInput() {
   const shown = state.amount ? Number(state.amount).toLocaleString('ja-JP') : '0';
   return `
     <div class="row" style="justify-content:space-between">
-      <input type="date" id="date" value="${state.date}" style="width:auto">
+      <input type="date" id="date" value="${state.date}">
       <span class="muted">今月 支出 ${yen(monthTotals().expense)}</span>
     </div>
     <div class="row">${kindBtns}</div>
-    <div class="big">${state.refund && state.kind === '支出' ? '−' : ''}¥${shown}</div>
-    <div class="row">
-      <button class="chip ${state.refund ? 'on' : ''}" data-act="refund">返金・精算（マイナス）</button>
+    <div class="row" style="justify-content:space-between">
+      <button class="chip ${state.refund ? 'on' : ''}" data-act="refund">返金・精算</button>
+      <div class="big">${state.refund && state.kind === '支出' ? '−' : ''}¥${shown}</div>
     </div>
     <div class="label">大分類</div>
     <div class="scroll">${groupChips || '<span class="muted">表示する大分類がありません（設定で表示してください）</span>'}</div>
@@ -287,12 +291,14 @@ function renderSettings() {
     <div class="row">${kindBtns}</div>
     <div class="list">${groupRows}</div>
     <div class="label">支払い方法</div>
-    <div class="list">${payRows}</div>`;
+    <div class="list">${payRows}</div>
+    <div class="row" style="justify-content:flex-end"><button class="btn" data-act="logout">ログアウト</button></div>`;
 }
 
 function render() {
   const app = document.getElementById('app');
   if (!state.session) {
+    app.className = '';
     app.innerHTML = renderLogin();
     return;
   }
@@ -304,9 +310,9 @@ function render() {
   }[state.tab]();
   const tabs = [['input', '入力'], ['history', '履歴'], ['monthly', '今月'], ['settings', '設定']]
     .map(([k, label]) => `<button class="${state.tab === k ? 'on' : ''}" data-act="tab" data-value="${k}">${label}</button>`).join('');
+  app.className = state.tab === 'input' ? 'one' : '';
   app.innerHTML = `
     ${body}
-    <div class="row" style="justify-content:flex-end"><button class="btn" data-act="logout">ログアウト</button></div>
     <nav class="tabs"><div class="inner">${tabs}</div></nav>`;
   const memo = document.getElementById('memo');
   if (memo) memo.addEventListener('input', (e) => { state.memo = e.target.value; });
